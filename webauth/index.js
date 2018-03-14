@@ -46,53 +46,57 @@ export default class WebAuth {
    * @memberof WebAuth
    */
   authorize(options = {}) {
-    const { clientId, domain, client, agent } = this;
+    const {
+      clientId, domain, client, agent,
+    } = this;
+
     return agent
       .newTransaction()
-      .then(({state, verifier, ...defaults}) => {
-        const bundleIdentifier = A0Auth0.bundleIdentifier;
-        const redirectUri = `${bundleIdentifier.toLowerCase()}://${domain}/${Platform.OS}/${bundleIdentifier}/callback`
+      .then(({ state, verifier, ...defaults }) => {
+        const { bundleIdentifier } = A0Auth0;
+        const redirectUri = `${bundleIdentifier.toLowerCase()}://${domain}/${Platform.OS}/${bundleIdentifier}/callback?`
         const expectedState = options.state || state;
-        let query = {
+        const query = {
           ...options,
           clientId,
-          responseType: 'code',
+          responseType: 'token',
           redirectUri,
           state: expectedState,
           ...defaults,
         };
-        const authorizeUrl = this.client.authorizeUrl(query);
+        const authorizeUrl = client.authorizeUrl(query);
         return agent
           .show(authorizeUrl)
           .then((redirectUrl) => {
+            redirectUrl = redirectUrl.replace('#', '?');
             if (!redirectUrl || !redirectUrl.startsWith(redirectUri)) {
               throw new AuthError({
                 json: {
                   error: 'a0.redirect_uri.not_expected',
-                  error_description: `Expected ${redirectUri} but got ${redirectUrl}`
+                  error_description: `Expected ${redirectUri} but got ${redirectUrl}`,
                 },
-                status: 0
+                status: 0,
               });
             }
-            const query = url.parse(redirectUrl, true).query
+            const { query } = url.parse(redirectUrl, true);
             const {
-              code,
+              access_token: accessToken,
               state: resultState,
-              error
+              error,
             } = query;
             if (error) {
-              throw new Auth0Error({json: query, status: 0});
+              throw new Auth0Error({ json: query, status: 0 });
             }
             if (resultState !== expectedState) {
               throw new AuthError({
                 json: {
                   error: 'a0.state.invalid',
-                  error_description: `Invalid state recieved in redirect url`
+                  error_description: 'Invalid state recieved in redirect url',
                 },
-                status: 0
+                status: 0,
               });
             }
-            return client.exchange({code, verifier, redirectUri})
+            return `${redirectUri}access_token=${accessToken}&state=${resultState}`;
           });
       });
   }
